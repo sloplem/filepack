@@ -21,7 +21,7 @@ use {
     collections::{BTreeMap, HashMap},
     env,
     fmt::{self, Display, Formatter},
-    fs::File,
+    fs,
     io::{self, IsTerminal},
     path::{Path, PathBuf},
     process,
