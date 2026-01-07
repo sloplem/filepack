@@ -51,7 +51,21 @@ impl File {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case", transparent)]
 struct Directory {
-  entries: BTreeMap<RelativePath, Entry>,
+  entries: BTreeMap<Component, Entry>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case", transparent)]
+struct Component(String);
+
+impl Component {
+  fn as_bytes(&self) -> &[u8] {
+    self.0.as_bytes()
+  }
+
+  fn len(&self) -> u64 {
+    self.0.len().into_u64()
+  }
 }
 
 impl Directory {
@@ -59,9 +73,9 @@ impl Directory {
     let mut hasher = blake3::Hasher::new();
     hasher.update(&[Tag::Directory as u8]);
 
-    for (path, entry) in &self.entries {
-      hasher.update(&path.str().len().to_le_bytes());
-      hasher.update(&path.str().as_bytes());
+    for (component, entry) in &self.entries {
+      hasher.update(&component.len().to_le_bytes());
+      hasher.update(&component.as_bytes());
       hasher.update(entry.fingerprint().as_bytes());
     }
 

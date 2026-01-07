@@ -27,6 +27,7 @@ use {
     process,
     str::{self, FromStr},
   },
+  usized::IntoU64,
   walkdir::WalkDir,
 };
 
