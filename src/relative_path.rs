@@ -81,11 +81,15 @@ impl RelativePath {
   pub(crate) fn to_lowercase(&self) -> Self {
     Self(self.0.to_lowercase())
   }
+
+  pub(crate) fn str(&self) -> &str {
+    &self.0
+  }
 }
 
 impl AsRef<str> for RelativePath {
   fn as_ref(&self) -> &str {
-    &self.0
+    self.str()
   }
 }
 
