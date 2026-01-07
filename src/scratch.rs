@@ -70,7 +70,7 @@ impl Directory {
 
     for (component, entry) in &self.entries {
       hasher.update(&component.len().to_le_bytes());
-      hasher.update(&component.as_bytes());
+      hasher.update(component.as_bytes());
       hasher.update(entry.fingerprint().as_bytes());
     }
 
@@ -92,12 +92,12 @@ mod tests {
   fn contexts_are_unique() {
     const ARRAY: [&str; 2] = [FILE_CONTEXT, DIRECTORY_CONTEXT];
 
-    let map = ARRAY.into::<BTreeMap>();
+    let map = BTreeSet::from(ARRAY);
 
     assert_eq!(map.len(), ARRAY.len());
 
     for context in ARRAY {
-      assert!(context.starts_with("filepack:0:"));
+      assert!(context.starts_with("com.filepack:0:"));
     }
   }
 }

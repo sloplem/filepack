@@ -37,7 +37,7 @@ pub use self::{
 };
 
 #[cfg(test)]
-use assert_fs::TempDir;
+use {assert_fs::TempDir, std::collections::BTreeSet};
 
 mod arguments;
 mod display_path;
