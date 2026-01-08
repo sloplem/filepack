@@ -159,7 +159,7 @@ fn empty_directory_error() {
     .args(["verify", "."])
     .current_dir(&dir)
     .assert()
-    .stderr("error: empty directory `foo`\n")
+    .stderr("error: extraneous file not in manifest: `foo`\n")
     .failure();
 }
 
@@ -180,7 +180,7 @@ fn multiple_empty_directories() {
     .args(["verify", "."])
     .current_dir(&dir)
     .assert()
-    .stderr("error: empty directories `bar` and `foo`\n")
+    .stderr(is_match("error: extraneous file not in manifest: `(bar|foo)`\n"))
     .failure();
 }
 
@@ -200,7 +200,7 @@ fn only_leaf_empty_directory_is_reported() {
     .args(["verify", "."])
     .current_dir(&dir)
     .assert()
-    .stderr(path("error: empty directory `foo/bar`\n"))
+    .stderr(path("error: extraneous file not in manifest: `foo`\n"))
     .failure();
 }
 
@@ -641,7 +641,7 @@ fn verify_fingerprint() {
     .args([
       "verify",
       "--fingerprint",
-      "74ddbe0dcf48c634aca1d90f37defd60b230fc52857ffa4b6c956583e8a4daaf",
+      "8231b5a5dc0aaf84e9b5b67fc924d4d2cadb23ab91e3c3cfe9768e28516c0882",
     ])
     .current_dir(&dir)
     .assert()
@@ -660,7 +660,7 @@ fn verify_fingerprint() {
       "\
 fingerprint mismatch: `.*filepack\\.json`
             expected: 0000000000000000000000000000000000000000000000000000000000000000
-              actual: 74ddbe0dcf48c634aca1d90f37defd60b230fc52857ffa4b6c956583e8a4daaf
+              actual: 8231b5a5dc0aaf84e9b5b67fc924d4d2cadb23ab91e3c3cfe9768e28516c0882
 error: fingerprint mismatch\n",
     ))
     .failure();

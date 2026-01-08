@@ -142,16 +142,6 @@ impl Create {
       return Err(error::Lint { count: lint_errors }.build());
     }
 
-    if !dirs.is_empty() {
-      dirs.sort();
-      return Err(Error::EmptyDirectory {
-        paths: dirs
-          .into_iter()
-          .map(|dir| dir.strip_prefix(&root).unwrap().to_owned().into())
-          .collect(),
-      });
-    }
-
     ensure! {
       self.force || !manifest_path.try_exists().context(error::FilesystemIo { path: &manifest_path })?,
       error::ManifestAlreadyExists {
@@ -159,20 +149,29 @@ impl Create {
       },
     }
 
-    let mut files = BTreeMap::new();
-
     let bar = progress_bar::new(&options, paths.values().sum());
 
+    let mut root_directory = Directory::new();
+
+    // Hash all files and insert into directory structure
     for (path, _size) in paths {
-      let entry = options
+      let file_entry = options
         .hash_file(&root.join(&path))
         .context(error::FilesystemIo { path: &path })?;
-      files.insert(path, entry);
-      bar.inc(entry.size);
+
+      Self::insert_file(&mut root_directory, &path, file_entry.hash, file_entry.size);
+      bar.inc(file_entry.size);
+    }
+
+    // Add empty directories to the structure
+    for dir in dirs {
+      let relative = dir.strip_prefix(&root).unwrap();
+      let relative = RelativePath::try_from(relative).context(error::Path { path: relative })?;
+      Self::insert_empty_directory(&mut root_directory, &relative);
     }
 
     let mut manifest = Manifest {
-      files,
+      files: root_directory,
       signatures: BTreeMap::new(),
     };
 
@@ -188,5 +187,62 @@ impl Create {
     manifest.save(&manifest_path)?;
 
     Ok(())
+  }
+
+  fn insert_file(directory: &mut Directory, path: &RelativePath, hash: Hash, size: u64) {
+    let components: Vec<&str> = path.str().split('/').collect();
+    Self::insert_file_components(directory, &components, hash, size);
+  }
+
+  fn insert_file_components(
+    directory: &mut Directory,
+    components: &[&str],
+    hash: Hash,
+    size: u64,
+  ) {
+    if components.len() == 1 {
+      let component = Component::from(components[0]);
+      let file = File::new(hash, size);
+      directory.insert(component, Entry::File(file));
+    } else {
+      let component = Component::from(components[0]);
+      let entry = directory
+        .entries
+        .entry(component.clone())
+        .or_insert_with(|| Entry::Directory(Directory::new()));
+
+      if let Entry::Directory(subdir) = entry {
+        Self::insert_file_components(subdir, &components[1..], hash, size);
+      }
+    }
+  }
+
+  fn insert_empty_directory(directory: &mut Directory, path: &RelativePath) {
+    let components: Vec<&str> = path.str().split('/').collect();
+    Self::insert_empty_directory_components(directory, &components);
+  }
+
+  fn insert_empty_directory_components(directory: &mut Directory, components: &[&str]) {
+    if components.is_empty() {
+      return;
+    }
+
+    let component = Component::from(components[0]);
+
+    if components.len() == 1 {
+      directory
+        .entries
+        .entry(component)
+        .or_insert_with(|| Entry::Directory(Directory::new()));
+    } else {
+      let entry = directory
+        .entries
+        .entry(component.clone())
+        .or_insert_with(|| Entry::Directory(Directory::new()));
+
+      if let Entry::Directory(subdir) = entry {
+        Self::insert_empty_directory_components(subdir, &components[1..]);
+      }
+    }
   }
 }

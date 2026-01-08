@@ -1,6 +1,7 @@
 use {
   self::{
-    arguments::Arguments, display_path::DisplayPath, display_secret::DisplaySecret, lint::Lint,
+    arguments::Arguments, component::Component, directory::Directory, display_path::DisplayPath,
+    display_secret::DisplaySecret, field_hasher::FieldHasher, file::File, lint::Lint,
     lint_group::LintGroup, list::List, metadata::Metadata, options::Options,
     owo_colorize_ext::OwoColorizeExt, private_key::PrivateKey, signature_error::SignatureError,
     style::Style, subcommand::Subcommand, template::Template, utf8_path_ext::Utf8PathExt,
@@ -21,12 +22,13 @@ use {
     collections::{BTreeMap, HashMap},
     env,
     fmt::{self, Display, Formatter},
-    fs::File,
+    fs,
     io::{self, IsTerminal},
     path::{Path, PathBuf},
     process,
     str::{self, FromStr},
   },
+  usized::IntoU64,
   walkdir::WalkDir,
 };
 
@@ -36,13 +38,17 @@ pub use self::{
 };
 
 #[cfg(test)]
-use assert_fs::TempDir;
+use {assert_fs::TempDir, std::collections::BTreeSet};
 
 mod arguments;
+mod component;
+mod directory;
 mod display_path;
 mod display_secret;
 mod entry;
 mod error;
+mod field_hasher;
+mod file;
 mod filesystem;
 mod hash;
 mod lint;

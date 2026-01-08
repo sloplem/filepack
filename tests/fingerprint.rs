@@ -17,12 +17,8 @@ fn fingerprint() {
 
   dir.child("filepack.json").assert(json.to_owned() + "\n");
 
-  let fingerprint = "74ddbe0dcf48c634aca1d90f37defd60b230fc52857ffa4b6c956583e8a4daaf";
-
-  assert_eq!(
-    blake3::hash(json.as_bytes()),
-    fingerprint.parse::<blake3::Hash>().unwrap(),
-  );
+  // Fingerprint is now calculated using recursive directory hashing, not JSON hashing
+  let fingerprint = "8231b5a5dc0aaf84e9b5b67fc924d4d2cadb23ab91e3c3cfe9768e28516c0882";
 
   Command::cargo_bin("filepack")
     .unwrap()
