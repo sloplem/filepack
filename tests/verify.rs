@@ -6,7 +6,7 @@ fn no_files() {
 
   dir
     .child("filepack.json")
-    .write_str(r#"{"files":{}}"#)
+    .write_str(&manifest_json(|_files| {}))
     .unwrap();
 
   Command::cargo_bin("filepack")
@@ -25,9 +25,9 @@ fn single_file() {
 
   dir
     .child("filepack.json")
-    .write_str(
-      r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#
-    )
+    .write_str(&manifest_json(|files| {
+      files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+    }))
     .unwrap();
 
   Command::cargo_bin("filepack")
@@ -46,9 +46,9 @@ fn single_file_omit_directory() {
 
   dir
     .child("filepack.json")
-    .write_str(
-      r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#
-    )
+    .write_str(&manifest_json(|files| {
+      files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+    }))
     .unwrap();
 
   Command::cargo_bin("filepack")
@@ -67,9 +67,9 @@ fn single_file_mmap() {
 
   dir
     .child("filepack.json")
-    .write_str(
-      r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#
-    )
+    .write_str(&manifest_json(|files| {
+      files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+    }))
     .unwrap();
 
   Command::cargo_bin("filepack")
@@ -88,9 +88,9 @@ fn single_file_parallel() {
 
   dir
     .child("filepack.json")
-    .write_str(
-      r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#
-    )
+    .write_str(&manifest_json(|files| {
+      files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+    }))
     .unwrap();
 
   Command::cargo_bin("filepack")
@@ -129,7 +129,7 @@ fn extraneous_file_error() {
 
   dir
     .child("filepack.json")
-    .write_str(r#"{"files":{}}"#)
+    .write_str(&manifest_json(|_files| {}))
     .unwrap();
 
   dir.child("foo").touch().unwrap();
@@ -144,12 +144,14 @@ fn extraneous_file_error() {
 }
 
 #[test]
-fn empty_directory_error() {
+fn empty_directory_is_verified() {
   let dir = TempDir::new().unwrap();
 
   dir
     .child("filepack.json")
-    .write_str(r#"{"files":{}}"#)
+    .write_str(&manifest_json(|files| {
+      files.insert_directory(&"foo".parse().unwrap());
+    }))
     .unwrap();
 
   dir.child("foo").create_dir_all().unwrap();
@@ -159,17 +161,19 @@ fn empty_directory_error() {
     .args(["verify", "."])
     .current_dir(&dir)
     .assert()
-    .stderr("error: empty directory `foo`\n")
-    .failure();
+    .success();
 }
 
 #[test]
-fn multiple_empty_directories() {
+fn multiple_empty_directories_are_verified() {
   let dir = TempDir::new().unwrap();
 
   dir
     .child("filepack.json")
-    .write_str(r#"{"files":{}}"#)
+    .write_str(&manifest_json(|files| {
+      files.insert_directory(&"bar".parse().unwrap());
+      files.insert_directory(&"foo".parse().unwrap());
+    }))
     .unwrap();
 
   dir.child("foo").create_dir_all().unwrap();
@@ -180,17 +184,19 @@ fn multiple_empty_directories() {
     .args(["verify", "."])
     .current_dir(&dir)
     .assert()
-    .stderr("error: empty directories `bar` and `foo`\n")
-    .failure();
+    .success();
 }
 
 #[test]
-fn only_leaf_empty_directory_is_reported() {
+fn nested_empty_directory_is_verified() {
   let dir = TempDir::new().unwrap();
 
   dir
     .child("filepack.json")
-    .write_str(r#"{"files":{}}"#)
+    .write_str(&manifest_json(|files| {
+      files.insert_directory(&"foo".parse().unwrap());
+      files.insert_directory(&"foo/bar".parse().unwrap());
+    }))
     .unwrap();
 
   dir.child("foo/bar").create_dir_all().unwrap();
@@ -200,8 +206,7 @@ fn only_leaf_empty_directory_is_reported() {
     .args(["verify", "."])
     .current_dir(&dir)
     .assert()
-    .stderr(path("error: empty directory `foo/bar`\n"))
-    .failure();
+    .success();
 }
 
 #[test]
@@ -333,7 +338,7 @@ fn non_unicode_path_error() {
 
   dir
     .child("filepack.json")
-    .write_str(r#"{"files":{}}"#)
+    .write_str(&manifest_json(|_files| {}))
     .unwrap();
 
   Command::cargo_bin("filepack")
@@ -369,11 +374,13 @@ error: I/O error at `filepack.json`
 fn print() {
   let dir = TempDir::new().unwrap();
 
-  let manifest = r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#;
+  let manifest = manifest_json(|files| {
+    files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+  });
 
   dir.child("foo").touch().unwrap();
 
-  dir.child("filepack.json").write_str(manifest).unwrap();
+  dir.child("filepack.json").write_str(&manifest).unwrap();
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -392,9 +399,9 @@ fn manifest_paths_are_relative_to_root() {
 
   dir
     .child("dir/filepack.json")
-    .write_str(
-      r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#
-    )
+    .write_str(&manifest_json(|files| {
+      files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+    }))
     .unwrap();
 
   Command::cargo_bin("filepack")
@@ -424,9 +431,9 @@ fn file_not_found_error_message() {
 
   dir
     .child("filepack.json")
-    .write_str(
-      r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#
-    )
+    .write_str(&manifest_json(|files| {
+      files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+    }))
     .unwrap();
 
   Command::cargo_bin("filepack")
@@ -444,9 +451,12 @@ fn with_manifest_path() {
 
   dir.child("foo").touch().unwrap();
 
-  dir.child("hello.json").write_str(
-    r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#,
-  ).unwrap();
+  dir
+    .child("hello.json")
+    .write_str(&manifest_json(|files| {
+      files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+    }))
+    .unwrap();
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -636,13 +646,12 @@ fn verify_fingerprint() {
     .assert()
     .success();
 
+  let (_path, manifest) = Manifest::load(Some(dir.child("filepack.json").utf8_path())).unwrap();
+  let fingerprint = manifest.fingerprint().to_string();
+
   Command::cargo_bin("filepack")
     .unwrap()
-    .args([
-      "verify",
-      "--fingerprint",
-      "74ddbe0dcf48c634aca1d90f37defd60b230fc52857ffa4b6c956583e8a4daaf",
-    ])
+    .args(["verify", "--fingerprint", &fingerprint])
     .current_dir(&dir)
     .assert()
     .success();
@@ -656,13 +665,13 @@ fn verify_fingerprint() {
     ])
     .current_dir(&dir)
     .assert()
-    .stderr(is_match(
+    .stderr(is_match(format!(
       "\
 fingerprint mismatch: `.*filepack\\.json`
             expected: 0000000000000000000000000000000000000000000000000000000000000000
-              actual: 74ddbe0dcf48c634aca1d90f37defd60b230fc52857ffa4b6c956583e8a4daaf
+              actual: {fingerprint}
 error: fingerprint mismatch\n",
-    ))
+    )))
     .failure();
 }
 
@@ -672,9 +681,9 @@ fn ignore_missing() {
 
   dir
     .child("filepack.json")
-    .write_str(
-      r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#
-    )
+    .write_str(&manifest_json(|files| {
+      files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+    }))
     .unwrap();
 
   Command::cargo_bin("filepack")
@@ -699,7 +708,12 @@ fn metadata_allows_unknown_keys() {
 
   dir
     .child("filepack.json")
-    .write_str(r#"{"files":{"metadata.json":{"hash":"1845a2ea1b86a250cb1c24115032cc0fdc064001f59af4a5e9a17be5cd7efbbc","size":25}}}"#)
+    .write_str(&manifest_json(|files| {
+      files.insert_file(
+        &"metadata.json".parse().unwrap(),
+        file_entry(br#"{"title":"Foo","bar":100}"#),
+      );
+    }))
     .unwrap();
 
   dir
@@ -721,7 +735,12 @@ fn metadata_may_not_be_invalid() {
 
   dir
     .child("filepack.json")
-    .write_str(r#"{"files":{"metadata.json":{"hash":"f113b1430243e68a2976426b0e13f21e5795cc107a914816fbf6c2f511092f4b","size":13}}}"#)
+    .write_str(&manifest_json(|files| {
+      files.insert_file(
+        &"metadata.json".parse().unwrap(),
+        file_entry(br#"{"title":100}"#),
+      );
+    }))
     .unwrap();
 
   dir

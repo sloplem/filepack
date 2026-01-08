@@ -6,9 +6,9 @@ use {
     fixture::{ChildPath, FileTouch, FileWriteBin, FileWriteStr, PathChild, PathCreateDir},
   },
   camino::Utf8Path,
-  filepack::{Manifest, PublicKey, Signature},
+  filepack::{Directory, File, Hash, Manifest, PublicKey, Signature},
   predicates::str::RegexPredicate,
-  std::{fs, path::Path, str},
+  std::{collections::BTreeMap, fs, path::Path, str},
 };
 
 trait ChildPathExt {
@@ -34,6 +34,29 @@ where
 
 fn load_key(path: &Path) -> String {
   fs::read_to_string(path).unwrap().trim().into()
+}
+
+fn file_entry(contents: &[u8]) -> File {
+  File {
+    hash: Hash::from(blake3::hash(contents)),
+    size: contents.len() as u64,
+  }
+}
+
+fn manifest_json<F>(builder: F) -> String
+where
+  F: FnOnce(&mut Directory),
+{
+  let mut files = Directory::default();
+  builder(&mut files);
+  format!(
+    "{}\n",
+    serde_json::to_string(&Manifest {
+      files,
+      signatures: BTreeMap::new(),
+    })
+    .unwrap()
+  )
 }
 
 mod create;

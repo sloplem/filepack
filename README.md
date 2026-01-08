@@ -182,13 +182,15 @@ Manifests contain an object with one mandatory key, `files`.
 
 ### `files`
 
-The value of the mandatory `files` key is an object mapping string paths to
-manifest entries. Manifest entries are objects with the key `hash`, whose value
-is a hex-encoded BLAKE3 hash of the file, and `size`, whose value is the length
-of the file in bytes.
+The value of the mandatory `files` key is a directory tree. Each key is a path
+component whose value is either a file entry or another directory. File entries
+are objects with the key `hash`, whose value is a hex-encoded BLAKE3 hash of the
+file, and `size`, whose value is the length of the file in bytes. Directories
+are objects whose keys are their children, and empty directories are represented
+as empty objects.
 
-An example manifest for a directory containing the files `README.md` and
-`src/main.c`:
+An example manifest for a directory containing the files `README.md`,
+`src/main.c`, and an empty directory named `empty-dir`:
 
 ```json
 {
@@ -197,10 +199,13 @@ An example manifest for a directory containing the files `README.md` and
       "hash": "5a9a6d96244ec398545fc0c98c2cb7ed52511b025c19e9ad1e3c1ef4ac8575ad",
       "size": 1573
     },
-    "src/main.c": {
-      "hash": "38abf296dc2a90f66f7870fe0ce584af3859668cf5140c7557a76786189dcf0f",
-      "size": 4491
-    }
+    "src": {
+      "main.c": {
+        "hash": "38abf296dc2a90f66f7870fe0ce584af3859668cf5140c7557a76786189dcf0f",
+        "size": 4491
+      }
+    },
+    "empty-dir": {}
   }
 }
 ```

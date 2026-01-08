@@ -568,6 +568,7 @@ dependencies = [
  "serde_with",
  "serde_yaml",
  "snafu",
+ "usized",
  "walkdir",
 ]
 
@@ -1335,6 +1336,12 @@ version = "0.0.0"
 dependencies = [
  "regex",
 ]
+
+[[package]]
+name = "usized"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85865ea16efae44651cd68e2065525a559eda59e8f4e1bb841fc5c3763bdbd28"
 
 [[package]]
 name = "utf8parse"

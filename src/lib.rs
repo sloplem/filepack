@@ -21,27 +21,27 @@ use {
     collections::{BTreeMap, HashMap},
     env,
     fmt::{self, Display, Formatter},
-    fs::File,
+    fs,
     io::{self, IsTerminal},
     path::{Path, PathBuf},
     process,
     str::{self, FromStr},
   },
+  usized::IntoU64,
   walkdir::WalkDir,
 };
 
 pub use self::{
-  entry::Entry, error::Error, hash::Hash, manifest::Manifest, public_key::PublicKey,
-  relative_path::RelativePath, signature::Signature,
+  error::Error, hash::Hash, manifest::Directory, manifest::Entry, manifest::File,
+  manifest::Manifest, public_key::PublicKey, relative_path::RelativePath, signature::Signature,
 };
 
 #[cfg(test)]
-use assert_fs::TempDir;
+use {assert_fs::TempDir, std::collections::BTreeSet};
 
 mod arguments;
 mod display_path;
 mod display_secret;
-mod entry;
 mod error;
 mod filesystem;
 mod hash;

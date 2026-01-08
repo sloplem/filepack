@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, std::collections::BTreeSet};
 
 #[derive(Parser)]
 pub(crate) struct Verify {
@@ -62,30 +62,54 @@ fingerprint mismatch: `{source}`
       return Err(error::FingerprintMismatch.build());
     }
 
-    let bar = progress_bar::new(
-      &options,
-      manifest.files.values().map(|entry| entry.size).sum(),
-    );
+    let entries = manifest.files.entries();
+
+    let total_size: u64 = entries
+      .iter()
+      .filter_map(|(_, entry)| match entry {
+        Entry::File(file) => Some(file.size),
+        Entry::Directory(_) => None,
+      })
+      .sum();
+
+    let bar = progress_bar::new(&options, total_size);
 
     let mut mismatches = BTreeMap::new();
 
-    for (path, &expected) in &manifest.files {
-      let actual = match options.hash_file(&root.join(path)) {
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-          ensure! {
-            self.ignore_missing,
-            error::MissingFile { path },
+    let mut expected_paths = BTreeSet::new();
+
+    for (path, entry) in &entries {
+      expected_paths.insert(path.clone());
+
+      match entry {
+        Entry::Directory(_) => {
+          let full_path = root.join(path);
+          if !full_path.is_dir() {
+            ensure! {
+              self.ignore_missing,
+              error::MissingDirectory { path },
+            }
           }
-          continue;
         }
-        result => result.context(error::FilesystemIo { path })?,
-      };
+        Entry::File(expected) => {
+          let actual = match options.hash_file(&root.join(path)) {
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+              ensure! {
+                self.ignore_missing,
+                error::MissingFile { path },
+              }
+              continue;
+            }
+            result => result.context(error::FilesystemIo { path })?,
+          };
 
-      if actual != expected {
-        mismatches.insert(path, (actual, expected));
+          if actual != *expected {
+            mismatches.insert(path, (actual, expected));
+          }
+
+          bar.inc(expected.size);
+        }
       }
-
-      bar.inc(expected.size);
     }
 
     if !mismatches.is_empty() {
@@ -124,8 +148,6 @@ mismatched file: `{path}`
       );
     }
 
-    let mut dirs = Vec::new();
-
     for entry in WalkDir::new(&root) {
       let entry = entry?;
 
@@ -133,18 +155,7 @@ mismatched file: `{path}`
 
       let path = decode_path(path)?;
 
-      while let Some(dir) = dirs.last() {
-        if path.starts_with(dir) {
-          dirs.pop();
-        } else {
-          break;
-        }
-      }
-
-      if entry.file_type().is_dir() {
-        if path != root {
-          dirs.push(path.to_owned());
-        }
+      if path == root {
         continue;
       }
 
@@ -157,7 +168,7 @@ mismatched file: `{path}`
       let path = RelativePath::try_from(path).context(error::Path { path })?;
 
       ensure! {
-        manifest.files.contains_key(&path),
+        expected_paths.contains(&path),
         error::ExtraneousFile { path },
       }
     }
@@ -180,16 +191,6 @@ mismatched file: `{path}`
         manifest.signatures.contains_key(&key),
         error::SignatureMissing { key },
       }
-    }
-
-    if !dirs.is_empty() {
-      dirs.sort();
-      return Err(Error::EmptyDirectory {
-        paths: dirs
-          .into_iter()
-          .map(|dir| dir.strip_prefix(&root).unwrap().to_owned().into())
-          .collect(),
-      });
     }
 
     if self.print {

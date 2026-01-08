@@ -82,6 +82,11 @@ pub enum Error {
     backtrace: Option<Backtrace>,
     path: DisplayPath,
   },
+  #[snafu(display("directory missing: `{path}`"))]
+  MissingDirectory {
+    backtrace: Option<Backtrace>,
+    path: RelativePath,
+  },
   #[snafu(display("file missing: `{path}`"))]
   MissingFile {
     backtrace: Option<Backtrace>,

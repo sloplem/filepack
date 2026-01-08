@@ -11,7 +11,9 @@ fn no_files() {
     .assert()
     .success();
 
-  dir.child("filepack.json").assert("{}\n");
+  dir
+    .child("filepack.json")
+    .assert(manifest_json(|_files| {}));
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -34,9 +36,9 @@ fn single_file_omit_root() {
     .assert()
     .success();
 
-  dir.child("filepack.json").assert(
-    r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#.to_owned() + "\n",
-  );
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+  }));
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -59,9 +61,9 @@ fn single_file() {
     .assert()
     .success();
 
-  dir.child("filepack.json").assert(
-    r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#.to_owned() + "\n",
-  );
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+  }));
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -84,9 +86,9 @@ fn single_non_empty_file() {
     .assert()
     .success();
 
-  dir.child("filepack.json").assert(
-    r#"{"files":{"foo":{"hash":"f2e897eed7d206cd855d441598fa521abc75aa96953e97c030c9612c30c1293d","size":3}}}"#.to_owned() + "\n",
-  );
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_file(&"foo".parse().unwrap(), file_entry(b"bar"));
+  }));
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -109,9 +111,9 @@ fn single_file_mmap() {
     .assert()
     .success();
 
-  dir.child("filepack.json").assert(
-    r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#.to_owned() + "\n",
-  );
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+  }));
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -134,9 +136,9 @@ fn single_file_parallel() {
     .assert()
     .success();
 
-  dir.child("filepack.json").assert(
-    r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#.to_owned() + "\n",
-  );
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+  }));
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -159,9 +161,9 @@ fn file_in_subdirectory() {
     .assert()
     .success();
 
-  dir.child("filepack.json").assert(
-    r#"{"files":{"foo/bar":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#.to_owned() + "\n",
-  );
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_file(&"foo/bar".parse().unwrap(), file_entry(b""));
+  }));
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -229,7 +231,7 @@ fn symlink_error() {
 }
 
 #[test]
-fn empty_directory_error() {
+fn empty_directory_is_recorded() {
   let dir = TempDir::new().unwrap();
 
   dir.child("foo").create_dir_all().unwrap();
@@ -239,12 +241,15 @@ fn empty_directory_error() {
     .args(["create", "."])
     .current_dir(&dir)
     .assert()
-    .stderr("error: empty directory `foo`\n")
-    .failure();
+    .success();
+
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_directory(&"foo".parse().unwrap());
+  }));
 }
 
 #[test]
-fn multiple_empty_directory_error() {
+fn multiple_empty_directories_are_recorded() {
   let dir = TempDir::new().unwrap();
 
   dir.child("foo").create_dir_all().unwrap();
@@ -256,12 +261,16 @@ fn multiple_empty_directory_error() {
     .args(["create", "."])
     .current_dir(&dir)
     .assert()
-    .stderr("error: empty directories `bar` and `foo`\n")
-    .failure();
+    .success();
+
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_directory(&"bar".parse().unwrap());
+    files.insert_directory(&"foo".parse().unwrap());
+  }));
 }
 
 #[test]
-fn only_leaf_empty_directory_is_reported() {
+fn nested_empty_directory_is_recorded() {
   let dir = TempDir::new().unwrap();
 
   dir.child("foo/bar").create_dir_all().unwrap();
@@ -271,8 +280,12 @@ fn only_leaf_empty_directory_is_reported() {
     .args(["create", "."])
     .current_dir(&dir)
     .assert()
-    .stderr(path("error: empty directory `foo/bar`\n"))
-    .failure();
+    .success();
+
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_directory(&"foo".parse().unwrap());
+    files.insert_directory(&"foo/bar".parse().unwrap());
+  }));
 }
 
 #[test]
@@ -398,9 +411,9 @@ fn force_overwrites_manifest() {
     .assert()
     .success();
 
-  dir.child("filepack.json").assert(
-    r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#.to_string() + "\n",
-  );
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+  }));
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -424,9 +437,9 @@ fn force_overwrites_manifest_with_destination() {
     .assert()
     .success();
 
-  dir.child("foo.json").assert(
-    r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#.to_owned() + "\n",
-  );
+  dir.child("foo.json").assert(manifest_json(|files| {
+    files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+  }));
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -449,9 +462,9 @@ fn with_manifest_path() {
     .assert()
     .success();
 
-  dir.child("hello.json").assert(
-    r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#.to_owned() + "\n",
-  );
+  dir.child("hello.json").assert(manifest_json(|files| {
+    files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+  }));
 
   Command::cargo_bin("filepack")
     .unwrap()
@@ -476,9 +489,15 @@ fn with_metadata() {
     .assert()
     .success();
 
-  dir.child("foo/filepack.json").assert(
-    r#"{"files":{"bar":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0},"metadata.json":{"hash":"395190e326d9f4b03fff68cacda59e9c31b9b2a702d46a12f89bfb1ec568c0f1","size":16}}}"#.to_owned() + "\n",
-  );
+  dir
+    .child("foo/filepack.json")
+    .assert(manifest_json(|files| {
+      files.insert_file(&"bar".parse().unwrap(), file_entry(b""));
+      files.insert_file(
+        &"metadata.json".parse().unwrap(),
+        file_entry(b"{\"title\":\"Foo\"}\n"),
+      );
+    }));
 
   dir
     .child("foo/metadata.json")
@@ -599,7 +618,7 @@ fn sign_creates_valid_signature() {
 
   let signature = manifest.signatures[&public_key].clone();
 
-  let fingerprint = blake3::hash(r#"{"files":{"bar":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#.as_bytes());
+  let fingerprint = manifest.fingerprint();
 
   public_key
     .verify(fingerprint.as_bytes(), &signature)
