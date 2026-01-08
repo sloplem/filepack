@@ -13,16 +13,12 @@ fn fingerprint() {
     .assert()
     .success();
 
-  let json = r#"{"files":{"foo":{"hash":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","size":0}}}"#;
+  dir.child("filepack.json").assert(manifest_json(|files| {
+    files.insert_file(&"foo".parse().unwrap(), file_entry(b""));
+  }));
 
-  dir.child("filepack.json").assert(json.to_owned() + "\n");
-
-  let fingerprint = "74ddbe0dcf48c634aca1d90f37defd60b230fc52857ffa4b6c956583e8a4daaf";
-
-  assert_eq!(
-    blake3::hash(json.as_bytes()),
-    fingerprint.parse::<blake3::Hash>().unwrap(),
-  );
+  let (_path, manifest) = Manifest::load(Some(dir.child("filepack.json").utf8_path())).unwrap();
+  let fingerprint = manifest.fingerprint().to_string();
 
   Command::cargo_bin("filepack")
     .unwrap()

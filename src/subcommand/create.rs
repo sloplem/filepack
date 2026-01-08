@@ -47,13 +47,13 @@ impl Create {
 
     let cleaned_metadata = self.metadata.map(|path| current_dir.join(path).lexiclean());
 
-    let mut paths = HashMap::new();
+    let mut paths = Vec::new();
 
     let mut case_conflicts = HashMap::<RelativePath, Vec<RelativePath>>::new();
 
     let mut lint_errors = 0u64;
 
-    let mut dirs = Vec::new();
+    let mut directories = Directory::default();
 
     for entry in WalkDir::new(&root) {
       let entry = entry?;
@@ -75,49 +75,48 @@ impl Create {
         return Err(error::MetadataTemplateIncluded { path }.build());
       }
 
-      while let Some(dir) = dirs.last() {
-        if path.starts_with(dir) {
-          dirs.pop();
-        } else {
-          break;
-        }
-      }
-
-      if entry.file_type().is_dir() {
-        if path != root {
-          dirs.push(path.to_owned());
-        }
-        continue;
-      }
-
       ensure! {
         !entry.file_type().is_symlink(),
         error::Symlink { path },
       }
 
-      let relative = path.strip_prefix(&root).unwrap();
+      let relative = if path == root {
+        None
+      } else {
+        let relative = path.strip_prefix(&root).unwrap();
+        Some(RelativePath::try_from(relative).context(error::Path { path: relative })?)
+      };
 
-      let relative = RelativePath::try_from(relative).context(error::Path { path: relative })?;
+      if let Some(relative) = relative.as_ref() {
+        match self.deny {
+          None => {}
+          Some(LintGroup::All) => {
+            if let Some(lint) = relative.lint() {
+              eprintln!("error: path failed lint: `{relative}`");
+              eprintln!("       └─ {lint}");
+              lint_errors += 1;
+            }
 
-      match self.deny {
-        None => {}
-        Some(LintGroup::All) => {
-          if let Some(lint) = relative.lint() {
-            eprintln!("error: path failed lint: `{relative}`");
-            eprintln!("       └─ {lint}");
-            lint_errors += 1;
+            case_conflicts
+              .entry(relative.to_lowercase())
+              .or_default()
+              .push(relative.clone());
           }
-
-          case_conflicts
-            .entry(relative.to_lowercase())
-            .or_default()
-            .push(relative.clone());
         }
       }
 
+      if entry.file_type().is_dir() {
+        if let Some(relative) = relative {
+          directories.insert_directory(&relative);
+        }
+        continue;
+      }
+
+      let relative = relative.expect("file entries are never root");
+
       let metadata = filesystem::metadata(path)?;
 
-      paths.insert(relative, metadata.len());
+      paths.push((relative, metadata.len()));
     }
 
     for mut originals in case_conflicts.into_values() {
@@ -142,16 +141,6 @@ impl Create {
       return Err(error::Lint { count: lint_errors }.build());
     }
 
-    if !dirs.is_empty() {
-      dirs.sort();
-      return Err(Error::EmptyDirectory {
-        paths: dirs
-          .into_iter()
-          .map(|dir| dir.strip_prefix(&root).unwrap().to_owned().into())
-          .collect(),
-      });
-    }
-
     ensure! {
       self.force || !manifest_path.try_exists().context(error::FilesystemIo { path: &manifest_path })?,
       error::ManifestAlreadyExists {
@@ -159,20 +148,24 @@ impl Create {
       },
     }
 
-    let mut files = BTreeMap::new();
+    let mut total_size = 0u64;
 
-    let bar = progress_bar::new(&options, paths.values().sum());
+    for (_, size) in &paths {
+      total_size += size;
+    }
+
+    let bar = progress_bar::new(&options, total_size);
 
     for (path, _size) in paths {
       let entry = options
         .hash_file(&root.join(&path))
         .context(error::FilesystemIo { path: &path })?;
-      files.insert(path, entry);
+      directories.insert_file(&path, entry);
       bar.inc(entry.size);
     }
 
     let mut manifest = Manifest {
-      files,
+      files: directories,
       signatures: BTreeMap::new(),
     };
 
