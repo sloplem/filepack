@@ -160,8 +160,9 @@ impl Create {
       let entry = options
         .hash_file(&root.join(&path))
         .context(error::FilesystemIo { path: &path })?;
+      let size = entry.size;
       directories.insert_file(&path, entry);
-      bar.inc(entry.size);
+      bar.inc(size);
     }
 
     let mut manifest = Manifest {

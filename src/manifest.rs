@@ -63,9 +63,6 @@ impl Component {
     &self.0
   }
 
-  fn len(&self) -> u64 {
-    self.0.len().into_u64()
-  }
 }
 
 impl Directory {
@@ -181,7 +178,7 @@ impl FieldHasher {
 impl Manifest {
   pub(crate) const FILENAME: &'static str = "filepack.json";
 
-  pub(crate) fn fingerprint(&self) -> Hash {
+  pub fn fingerprint(&self) -> Hash {
     self.files.fingerprint()
   }
 
