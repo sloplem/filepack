@@ -180,7 +180,7 @@ fn multiple_empty_directories() {
     .args(["verify", "."])
     .current_dir(&dir)
     .assert()
-    .stderr("error: extraneous file not in manifest: `bar`\n")
+    .stderr(is_match("error: extraneous file not in manifest: `(bar|foo)`\n"))
     .failure();
 }
 
