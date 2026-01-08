@@ -12,7 +12,7 @@ pub struct Manifest {
 impl Manifest {
   pub(crate) const FILENAME: &'static str = "filepack.json";
 
-  pub(crate) fn fingerprint(&self) -> Hash {
+  pub fn fingerprint(&self) -> Hash {
     self.files.fingerprint()
   }
 
