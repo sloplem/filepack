@@ -17,7 +17,7 @@ pub(crate) struct Options {
 }
 
 impl Options {
-  pub(crate) fn hash_file(&self, path: &Utf8Path) -> io::Result<Entry> {
+  pub(crate) fn hash_file(&self, path: &Utf8Path) -> io::Result<File> {
     let mut hasher = Hasher::new();
 
     if self.parallel {
@@ -28,10 +28,7 @@ impl Options {
       hasher.update_reader(fs::File::open(path)?)?;
     }
 
-    Ok(Entry {
-      hash: hasher.finalize().into(),
-      size: hasher.count(),
-    })
+    Ok(File::new(hasher.finalize().into(), hasher.count()))
   }
 
   pub(crate) fn key_dir(&self) -> Result<Utf8PathBuf> {

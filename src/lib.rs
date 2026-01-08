@@ -1,6 +1,7 @@
 use {
   self::{
-    arguments::Arguments, display_path::DisplayPath, display_secret::DisplaySecret, lint::Lint,
+    arguments::Arguments, component::Component, directory::Directory, display_path::DisplayPath,
+    display_secret::DisplaySecret, field_hasher::FieldHasher, file::File, lint::Lint,
     lint_group::LintGroup, list::List, metadata::Metadata, options::Options,
     owo_colorize_ext::OwoColorizeExt, private_key::PrivateKey, signature_error::SignatureError,
     style::Style, subcommand::Subcommand, template::Template, utf8_path_ext::Utf8PathExt,
@@ -40,10 +41,14 @@ pub use self::{
 use {assert_fs::TempDir, std::collections::BTreeSet};
 
 mod arguments;
+mod component;
+mod directory;
 mod display_path;
 mod display_secret;
 mod entry;
 mod error;
+mod field_hasher;
+mod file;
 mod filesystem;
 mod hash;
 mod lint;
@@ -57,7 +62,6 @@ mod private_key;
 mod progress_bar;
 mod public_key;
 mod relative_path;
-mod scratch;
 mod signature;
 mod signature_error;
 mod style;

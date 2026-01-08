@@ -62,31 +62,20 @@ fingerprint mismatch: `{source}`
       return Err(error::FingerprintMismatch.build());
     }
 
-    let bar = progress_bar::new(
-      &options,
-      manifest.files.values().map(|entry| entry.size).sum(),
-    );
+    let total_size = Self::calculate_total_size(&manifest.files);
+    let bar = progress_bar::new(&options, total_size);
 
     let mut mismatches = BTreeMap::new();
 
-    for (path, &expected) in &manifest.files {
-      let actual = match options.hash_file(&root.join(path)) {
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {
-          ensure! {
-            self.ignore_missing,
-            error::MissingFile { path },
-          }
-          continue;
-        }
-        result => result.context(error::FilesystemIo { path })?,
-      };
-
-      if actual != expected {
-        mismatches.insert(path, (actual, expected));
-      }
-
-      bar.inc(expected.size);
-    }
+    Self::verify_directory(
+      &options,
+      &root,
+      &Utf8PathBuf::new(),
+      &manifest.files,
+      &mut mismatches,
+      &bar,
+      self.ignore_missing,
+    )?;
 
     if !mismatches.is_empty() {
       for (path, (actual, expected)) in &mismatches {
@@ -124,43 +113,7 @@ mismatched file: `{path}`
       );
     }
 
-    let mut dirs = Vec::new();
-
-    for entry in WalkDir::new(&root) {
-      let entry = entry?;
-
-      let path = entry.path();
-
-      let path = decode_path(path)?;
-
-      while let Some(dir) = dirs.last() {
-        if path.starts_with(dir) {
-          dirs.pop();
-        } else {
-          break;
-        }
-      }
-
-      if entry.file_type().is_dir() {
-        if path != root {
-          dirs.push(path.to_owned());
-        }
-        continue;
-      }
-
-      if current_dir.join(path) == current_dir.join(&source) {
-        continue;
-      }
-
-      let path = path.strip_prefix(&root).unwrap();
-
-      let path = RelativePath::try_from(path).context(error::Path { path })?;
-
-      ensure! {
-        manifest.files.contains_key(&path),
-        error::ExtraneousFile { path },
-      }
-    }
+    Self::check_extraneous_entries(&root, &current_dir, &source, &manifest.files)?;
 
     {
       let path = root.join(Metadata::FILENAME);
@@ -182,20 +135,180 @@ mismatched file: `{path}`
       }
     }
 
-    if !dirs.is_empty() {
-      dirs.sort();
-      return Err(Error::EmptyDirectory {
-        paths: dirs
-          .into_iter()
-          .map(|dir| dir.strip_prefix(&root).unwrap().to_owned().into())
-          .collect(),
-      });
-    }
+    Self::verify_empty_directories(&root, &Utf8PathBuf::new(), &manifest.files)?;
 
     if self.print {
       print!("{json}");
     }
 
+    Ok(())
+  }
+
+  fn calculate_total_size(directory: &Directory) -> u64 {
+    let mut total = 0;
+    for entry in directory.entries.values() {
+      match entry {
+        Entry::File(file) => total += file.size,
+        Entry::Directory(dir) => total += Self::calculate_total_size(dir),
+      }
+    }
+    total
+  }
+
+  fn verify_directory(
+    options: &Options,
+    root: &Utf8Path,
+    current_path: &Utf8Path,
+    directory: &Directory,
+    mismatches: &mut BTreeMap<Utf8PathBuf, (File, File)>,
+    bar: &ProgressBar,
+    ignore_missing: bool,
+  ) -> Result {
+    for (component, entry) in &directory.entries {
+      let entry_path = current_path.join(component.as_str());
+
+      match entry {
+        Entry::File(expected) => {
+          let full_path = root.join(&entry_path);
+          let actual = match options.hash_file(&full_path) {
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
+              let relative_path =
+                RelativePath::try_from(entry_path.as_path()).context(error::Path { path: &entry_path })?;
+              ensure! {
+                ignore_missing,
+                error::MissingFile {
+                  path: relative_path,
+                },
+              }
+              continue;
+            }
+            result => result.context(error::FilesystemIo { path: &entry_path })?,
+          };
+
+          if &actual != expected {
+            mismatches.insert(entry_path, (actual.clone(), expected.clone()));
+          }
+
+          bar.inc(expected.size);
+        }
+        Entry::Directory(subdir) => {
+          Self::verify_directory(
+            options,
+            root,
+            &entry_path,
+            subdir,
+            mismatches,
+            bar,
+            ignore_missing,
+          )?;
+        }
+      }
+    }
+    Ok(())
+  }
+
+  fn check_extraneous_entries(
+    root: &Utf8Path,
+    current_dir: &Utf8Path,
+    source: &Utf8Path,
+    directory: &Directory,
+  ) -> Result {
+    for entry in WalkDir::new(root) {
+      let entry = entry?;
+
+      let path = entry.path();
+      let path = decode_path(path)?;
+
+      if entry.file_type().is_dir() {
+        if path == root {
+          continue;
+        }
+
+        let relative = path.strip_prefix(root).unwrap();
+        let relative_path = RelativePath::try_from(relative).context(error::Path { path: relative })?;
+
+        if !Self::directory_contains_path(directory, &relative_path) {
+          return Err(error::ExtraneousFile { path: &relative_path }.build());
+        }
+
+        continue;
+      }
+
+      if current_dir.join(path) == current_dir.join(source) {
+        continue;
+      }
+
+      let relative = path.strip_prefix(root).unwrap();
+      let relative_path = RelativePath::try_from(relative).context(error::Path { path: relative })?;
+
+      if !Self::directory_contains_path(directory, &relative_path) {
+        return Err(error::ExtraneousFile { path: &relative_path }.build());
+      }
+    }
+
+    Ok(())
+  }
+
+  fn directory_contains_path(directory: &Directory, path: &RelativePath) -> bool {
+    let components: Vec<&str> = path.str().split('/').collect();
+    Self::directory_contains_components(directory, &components)
+  }
+
+  fn directory_contains_components(directory: &Directory, components: &[&str]) -> bool {
+    if components.is_empty() {
+      return true;
+    }
+
+    let component = Component::from(components[0]);
+
+    if let Some(entry) = directory.entries.get(&component) {
+      if components.len() == 1 {
+        true
+      } else {
+        match entry {
+          Entry::Directory(subdir) => Self::directory_contains_components(subdir, &components[1..]),
+          Entry::File(_) => false,
+        }
+      }
+    } else {
+      false
+    }
+  }
+
+  fn verify_empty_directories(
+    root: &Utf8Path,
+    current_path: &Utf8Path,
+    directory: &Directory,
+  ) -> Result {
+    for (component, entry) in &directory.entries {
+      let entry_path = current_path.join(component.as_str());
+
+      if let Entry::Directory(subdir) = entry {
+        let full_path = root.join(&entry_path);
+
+        if subdir.entries.is_empty() {
+          let relative_path =
+            RelativePath::try_from(entry_path.as_path()).context(error::Path { path: &entry_path })?;
+          ensure! {
+            full_path.try_exists().context(error::FilesystemIo { path: &entry_path })?,
+            error::MissingFile { path: relative_path },
+          }
+
+          let is_empty = std::fs::read_dir(full_path.as_std_path())
+            .context(error::FilesystemIo { path: &entry_path })?
+            .next()
+            .is_none();
+
+          if !is_empty {
+            return Err(Error::EmptyDirectory {
+              paths: vec![entry_path.into()],
+            });
+          }
+        } else {
+          Self::verify_empty_directories(root, &entry_path, subdir)?;
+        }
+      }
+    }
     Ok(())
   }
 }
